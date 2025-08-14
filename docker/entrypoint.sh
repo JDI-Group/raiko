@@ -73,20 +73,20 @@ function update_docker_chain_specs() {
         update_chain_spec_json $CONFIG_FILE "ethereum" "beacon_rpc" $ETHEREUM_BEACON_RPC
     fi
 
-    if [ -n "${HOLESKY_RPC}" ]; then
-        update_chain_spec_json $CONFIG_FILE "holesky" "rpc" $HOLESKY_RPC
+    if [ -n "${BSC_RPC}" ]; then
+        update_chain_spec_json $CONFIG_FILE "bsc_mainnet" "rpc" $BSC_RPC
     fi
 
-    if [ -n "${HOLESKY_BEACON_RPC}" ]; then
-        update_chain_spec_json $CONFIG_FILE "holesky" "beacon_rpc" $HOLESKY_BEACON_RPC
+    if [ -n "${BSC_TESTNET_RPC}" ]; then
+        update_chain_spec_json $CONFIG_FILE "bsc_testnet" "rpc" $BSC_TESTNET_RPC
     fi
 
-    if [ -n "${TAIKO_A7_RPC}" ]; then
-        update_chain_spec_json $CONFIG_FILE "taiko_a7" "rpc" $TAIKO_A7_RPC
+    if [ -n "${MOONCHAIN_HUDSON_RPC}" ]; then
+        update_chain_spec_json $CONFIG_FILE "moonchain_hudson" "rpc" $MOONCHAIN_HUDSON_RPC
     fi
 
-    if [ -n "${TAIKO_MAINNET_RPC}" ]; then
-        update_chain_spec_json $CONFIG_FILE "taiko_mainnet" "rpc" $TAIKO_MAINNET_RPC
+    if [ -n "${MOONCHAIN_MAINNET_RPC}" ]; then
+        update_chain_spec_json $CONFIG_FILE "moonchain_mainnet" "rpc" $MOONCHAIN_MAINNET_RPC
     fi
 }
 

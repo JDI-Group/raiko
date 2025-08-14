@@ -1,6 +1,6 @@
 {
-    "network": "taiko_a7",
-    "l1_network": "holesky",
+    "network": "moonchain_hudson",
+    "l1_network": "bsc_testnet",
     "sgx": {
         "instance_id": 123456
     }

@@ -1,7 +1,7 @@
 # https://raw.githubusercontent.com/intel/SGXDataCenterAttestationPrimitives/master/QuoteGeneration/pccs/container/Dockerfile
 
 # Use multi-stage builds to reduce final image size
-FROM ubuntu:23.04 AS builder
+FROM ubuntu:24.04 AS builder
 
 # Define arguments used across multiple stages
 ARG DCAP_VERSION=DCAP_1.20
@@ -46,7 +46,7 @@ RUN npm config set proxy $http_proxy \
     && npm install
 
 # Start final image build
-FROM ubuntu:23.04
+FROM ubuntu:24.04
 
 # Create user and group before copying files
 ARG USER=pccs
