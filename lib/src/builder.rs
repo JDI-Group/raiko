@@ -229,8 +229,7 @@ impl RethBlockBuilder<MemDb> {
     /// Finalizes the block building and returns the header
     pub fn finalize(&mut self) -> Result<Header> {
         let state_root = self.calculate_state_root()?;
-        // Skipped for Moonchain. TODO: Need to fix it.
-        // ensure!(self.input.block.state_root == state_root);
+        ensure!(self.input.block.state_root == state_root);
         Ok(self.input.block.header.clone())
     }
 
