@@ -33,6 +33,9 @@ opt-level = 3
 
 [workspace.dependencies]
 
+# Version locks for compatibility
+base64ct = "=1.6.0"
+
 # raiko
 raiko-lib = { path = "./lib", features = ["std"] }
 raiko-core = { path = "./core" }
