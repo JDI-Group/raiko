@@ -143,7 +143,7 @@ pub async fn prepare_taiko_chain_input(
     // Fetch the tx data from either calldata or blobdata
     let (tx_data, blob_commitment, blob_proof) = if block_proposed.blob_used() {
         let expected_blob_hash = block_proposed.blob_hash();
-        let blob_hashes = proposal_tx.blob_versioned_hashes.unwrap_or_default();
+        let blob_hashes = proposal_tx.blob_versioned_hashes.clone().unwrap_or_default();
         // Get the blob hashes attached to the propose tx and make sure the expected blob hash is in there
         require(
             blob_hashes.contains(&expected_blob_hash),
@@ -158,6 +158,7 @@ pub async fn prepare_taiko_chain_input(
             l1_inclusion_header.timestamp,
             l1_chain_spec,
             &blob_proof_type,
+            Some(&proposal_tx),
         )
         .await?
     } else {
@@ -202,6 +203,7 @@ pub async fn get_tx_data(
     timestamp: u64,
     chain_spec: &ChainSpec,
     blob_proof_type: &BlobProofType,
+    proposal_tx: Option<&AlloyRpcTransaction>,
 ) -> RaikoResult<(Vec<u8>, Option<Vec<u8>>, Option<Vec<u8>>)> {
     debug!("get tx from hash blob: {blob_hash:?}");
     
@@ -210,7 +212,12 @@ pub async fn get_tx_data(
     
     if is_bsc {
         // For BSC networks, use GetBlobSidecarByTxHash instead of beacon chain
-        get_tx_data_bsc(blob_hash, chain_spec, blob_proof_type).await
+        // We need the proposal transaction hash for BSC
+        if let Some(tx) = proposal_tx {
+            get_tx_data_bsc(blob_hash, tx.hash, chain_spec, blob_proof_type).await
+        } else {
+            Err(RaikoError::Preflight("Proposal transaction is required for BSC networks".to_owned()))
+        }
     } else {
         // For other networks, use the existing beacon chain method
         get_tx_data_beacon(blob_hash, timestamp, chain_spec, blob_proof_type).await
@@ -673,19 +680,14 @@ struct BscBlobSidecarResponse {
 // BSC blob data retrieval using GetBlobSidecarByTxHash
 async fn get_tx_data_bsc(
     blob_hash: B256,
+    tx_hash: B256,
     chain_spec: &ChainSpec,
     blob_proof_type: &BlobProofType,
 ) -> RaikoResult<(Vec<u8>, Option<Vec<u8>>, Option<Vec<u8>>)> {
-    debug!("get tx from BSC blob sidecar: {blob_hash:?}");
+    debug!("get tx from BSC blob sidecar: {blob_hash:?}, tx_hash: {tx_hash:?}");
 
     // Create an RPC provider for BSC network
     let provider = RpcBlockDataProvider::new(&chain_spec.rpc, 0)?;
-
-    // For BSC, we need the transaction hash to get the blob sidecar
-    // Since we have the blob_hash, we need to find the transaction that contains this blob
-    // In a real scenario, this information should be provided or obtained differently
-    // For now, we'll use the blob_hash as a placeholder for tx_hash
-    let tx_hash = blob_hash;
 
     info!("Fetching blob from BSC chain using GetBlobSidecarByTxHash, tx_hash: {tx_hash:?}");
 
