@@ -731,11 +731,8 @@ async fn get_tx_data_bsc(
         let mut kzg_commitment = [0u8; 48];
         kzg_commitment.copy_from_slice(&commitment);
 
-        // Calculate blob hash from commitment and compare with expected blob hash
-        let calculated_blob_hash = eip4844::calc_kzg_proof_commitment(&kzg_commitment)
-            .map_err(|e| RaikoError::Preflight(format!("Failed to calculate blob hash: {e}")))?;
-        
-        let version_hash = commitment_to_version_hash(&calculated_blob_hash);
+        // Use the commitment directly to calculate version hash
+        let version_hash = commitment_to_version_hash(&kzg_commitment);
         if version_hash.0 == blob_hash.0 {
             info!("Found matching blob at index {i}, commitment: {commitment_hex}");
 
@@ -749,9 +746,8 @@ async fn get_tx_data_bsc(
                 ));
             }
 
-            // Process the blob data directly instead of using deserialize_blob_rust
-            let commitment = eip4844::calc_kzg_proof_commitment(&blob_data)
-                .map_err(|e| RaikoError::Preflight(format!("Failed to calculate commitment: {e}")))?;
+            // Use the commitment from BSC API response
+            let commitment = kzg_commitment;
 
             let blob_proof = match blob_proof_type {
                 BlobProofType::KzgVersionedHash => None,
