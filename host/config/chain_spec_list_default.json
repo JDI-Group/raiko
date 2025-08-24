@@ -287,7 +287,7 @@
         },
         "l1_contract": null,
         "l2_contract": null,
-        "rpc": "https://bsc-testnet.blockpi.network/v1/rpc/ccce7a10cc4781c4617210dac36f2318003b5c34",
+        "rpc": "https://bsc-testnet.drpc.org",
         "verifier_address_forks": {
             "CANCUN": {
                 "SGX": "0x532efbf6d62720d0b2a2bb9d11066e8588cae6d9",

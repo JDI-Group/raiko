@@ -204,6 +204,27 @@ pub async fn get_tx_data(
     blob_proof_type: &BlobProofType,
 ) -> RaikoResult<(Vec<u8>, Option<Vec<u8>>, Option<Vec<u8>>)> {
     debug!("get tx from hash blob: {blob_hash:?}");
+    
+    // Check if this is a BSC network (BSC mainnet: 56, BSC testnet: 97)
+    let is_bsc = matches!(chain_spec.chain_id, 56 | 97);
+    
+    if is_bsc {
+        // For BSC networks, use GetBlobSidecarByTxHash instead of beacon chain
+        get_tx_data_bsc(blob_hash, chain_spec, blob_proof_type).await
+    } else {
+        // For other networks, use the existing beacon chain method
+        get_tx_data_beacon(blob_hash, timestamp, chain_spec, blob_proof_type).await
+    }
+}
+
+// Original beacon chain method for non-BSC networks
+async fn get_tx_data_beacon(
+    blob_hash: B256,
+    timestamp: u64,
+    chain_spec: &ChainSpec,
+    blob_proof_type: &BlobProofType,
+) -> RaikoResult<(Vec<u8>, Option<Vec<u8>>, Option<Vec<u8>>)> {
+    debug!("get tx from beacon chain blob: {blob_hash:?}");
     // Get the blob data for this block
     let slot_id = block_time_to_block_slot(
         timestamp,
@@ -625,4 +646,134 @@ async fn get_blob_data_blobscan(
 
     let blob = response.json::<BlobScanData>().await?;
     Ok(blob_to_bytes(&blob.data))
+}
+
+// BSC specific structures for GetBlobSidecarByTxHash response
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct BscBlobTxSidecar {
+    pub blobs: Vec<String>,
+    pub commitments: Vec<String>,
+    pub proofs: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct BscBlobSidecarResponse {
+    #[serde(rename = "blobSidecar")]
+    pub blob_sidecar: BscBlobTxSidecar,
+    #[serde(rename = "blockNumber")]
+    pub block_number: String,
+    #[serde(rename = "blockHash")]
+    pub block_hash: String,
+    #[serde(rename = "txIndex")]
+    pub tx_index: String,
+    #[serde(rename = "txHash")]
+    pub tx_hash: String,
+}
+
+// BSC blob data retrieval using GetBlobSidecarByTxHash
+async fn get_tx_data_bsc(
+    blob_hash: B256,
+    chain_spec: &ChainSpec,
+    blob_proof_type: &BlobProofType,
+) -> RaikoResult<(Vec<u8>, Option<Vec<u8>>, Option<Vec<u8>>)> {
+    debug!("get tx from BSC blob sidecar: {blob_hash:?}");
+
+    // Create an RPC provider for BSC network
+    let provider = RpcBlockDataProvider::new(&chain_spec.rpc, 0)?;
+
+    // For BSC, we need the transaction hash to get the blob sidecar
+    // Since we have the blob_hash, we need to find the transaction that contains this blob
+    // In a real scenario, this information should be provided or obtained differently
+    // For now, we'll use the blob_hash as a placeholder for tx_hash
+    let tx_hash = blob_hash;
+
+    info!("Fetching blob from BSC chain using GetBlobSidecarByTxHash, tx_hash: {tx_hash:?}");
+
+    // Call eth_getBlobSidecarByTxHash using the provider's RPC client
+    let raw_result: serde_json::Value = provider.client
+        .request("eth_getBlobSidecarByTxHash", (tx_hash, true))
+        .await
+        .map_err(|e| {
+            error!("Failed to get blob sidecar by tx hash: {e}");
+            RaikoError::RPC(format!("Failed to get blob sidecar by tx hash: {e}"))
+        })?;
+
+    let response: BscBlobSidecarResponse = serde_json::from_value(raw_result)
+        .map_err(|e| {
+            error!("Failed to unmarshal blob sidecar response: {e}");
+            RaikoError::RPC(format!("Failed to unmarshal blob sidecar response: {e}"))
+        })?;
+
+    if response.blob_sidecar.blobs.is_empty() {
+        return Err(RaikoError::Preflight(
+            format!("No blobs found for transaction {tx_hash:?}"),
+        ));
+    }
+
+    info!("Found {} blobs in BSC sidecar", response.blob_sidecar.blobs.len());
+
+    // Find the blob that matches our blob hash
+    for (i, commitment_hex) in response.blob_sidecar.commitments.iter().enumerate() {
+        if i >= response.blob_sidecar.blobs.len() {
+            continue;
+        }
+
+        let commitment = hex::decode(commitment_hex.trim_start_matches("0x"))
+            .map_err(|_| RaikoError::Preflight("Invalid commitment hex".to_owned()))?;
+        
+        if commitment.len() != 48 {
+            warn!("Invalid commitment length: expected 48, got {}", commitment.len());
+            continue;
+        }
+
+        let mut kzg_commitment = [0u8; 48];
+        kzg_commitment.copy_from_slice(&commitment);
+
+        // Calculate blob hash from commitment and compare with expected blob hash
+        let calculated_blob_hash = eip4844::calc_kzg_proof_commitment(&kzg_commitment)
+            .map_err(|e| RaikoError::Preflight(format!("Failed to calculate blob hash: {e}")))?;
+        
+        let version_hash = commitment_to_version_hash(&calculated_blob_hash);
+        if version_hash.0 == blob_hash.0 {
+            info!("Found matching blob at index {i}, commitment: {commitment_hex}");
+
+            // Convert hex blob data to bytes
+            let blob_data = hex::decode(response.blob_sidecar.blobs[i].trim_start_matches("0x"))
+                .map_err(|_| RaikoError::Preflight("Invalid blob hex data".to_owned()))?;
+            
+            if blob_data.len() != 131072 {
+                return Err(RaikoError::Preflight(
+                    format!("Invalid blob data length: expected 131072, got {}", blob_data.len()),
+                ));
+            }
+
+            // Process the blob data directly instead of using deserialize_blob_rust
+            let commitment = eip4844::calc_kzg_proof_commitment(&blob_data)
+                .map_err(|e| RaikoError::Preflight(format!("Failed to calculate commitment: {e}")))?;
+
+            let blob_proof = match blob_proof_type {
+                BlobProofType::KzgVersionedHash => None,
+                BlobProofType::ProofOfEquivalence => {
+                    let (x, y) = eip4844::proof_of_equivalence(&blob_data, &commitment_to_version_hash(&commitment))
+                        .map_err(|e| RaikoError::Preflight(format!("Failed to generate proof of equivalence: {e}")))?;
+
+                    debug!("x {x:?} y {y:?}");
+                    let point = eip4844::calc_kzg_proof_with_point(&blob_data, ZFr::from_bytes(&x).unwrap());
+                    debug!("calc_kzg_proof_with_point {point:?}");
+
+                    Some(
+                        point
+                            .map(|g1| g1.to_bytes().to_vec())
+                            .map_err(|e| RaikoError::Preflight(format!("Failed to convert point to bytes: {e}")))?,
+                    )
+                }
+            };
+
+            return Ok((blob_data, Some(commitment.to_vec()), blob_proof));
+        }
+    }
+
+    Err(RaikoError::Preflight(
+        format!("Blob with hash {blob_hash:?} not found in BSC transaction {tx_hash:?}"),
+    ))
 }
