@@ -301,7 +301,7 @@
     },
     {
         "name": "bsc_mainnet",
-        "chain_id": 57,
+        "chain_id": 56,
         "max_spec_id": "CANCUN",
         "hard_forks": {
             "CANCUN": {

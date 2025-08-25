@@ -28,7 +28,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     interfaces::{RaikoError, RaikoResult},
-    provider::{db::ProviderDb, rpc::RpcBlockDataProvider, BlockDataProvider},
+    provider::{db::ProviderDb, rpc::RpcBlockDataProvider, BlockDataProvider, is_bsc_chain},
     require,
 };
 
@@ -129,12 +129,29 @@ pub async fn prepare_taiko_chain_input(
     )
     .await?;
     assert_eq!(anchor_state_root, l1_state_header.state_root);
-    let l1_state_block_hash = l1_state_header.hash.ok_or_else(|| {
-        RaikoError::Preflight("No L1 state block hash for the requested block".to_owned())
-    })?;
-    let l1_inclusion_block_hash = l1_inclusion_header.hash.ok_or_else(|| {
-        RaikoError::Preflight("No L1 inclusion block hash for the requested block".to_owned())
-    })?;
+    
+    // For BSC chains, use the hash from RPC directly instead of calculating
+    let l1_state_block_hash = if is_bsc_chain(l1_chain_spec.chain_id) {
+        info!("BSC L1 chain detected, using RPC block hash for L1 state header");
+        l1_state_header.hash.ok_or_else(|| {
+            RaikoError::Preflight("No L1 state block hash from RPC for BSC chain".to_owned())
+        })?
+    } else {
+        l1_state_header.hash.ok_or_else(|| {
+            RaikoError::Preflight("No L1 state block hash for the requested block".to_owned())
+        })?
+    };
+    
+    let l1_inclusion_block_hash = if is_bsc_chain(l1_chain_spec.chain_id) {
+        info!("BSC L1 chain detected, using RPC block hash for L1 inclusion header");
+        l1_inclusion_header.hash.ok_or_else(|| {
+            RaikoError::Preflight("No L1 inclusion block hash from RPC for BSC chain".to_owned())
+        })?
+    } else {
+        l1_inclusion_header.hash.ok_or_else(|| {
+            RaikoError::Preflight("No L1 inclusion block hash for the requested block".to_owned())
+        })?
+    };
     info!(
         "L1 inclusion block number: {l1_inclusion_block_number:?}, hash: {l1_inclusion_block_hash:?}. L1 state block number: {:?}, hash: {l1_state_block_hash:?}",
         l1_state_header.number,

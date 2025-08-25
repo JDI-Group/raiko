@@ -2,7 +2,7 @@ use std::{fs::File, path::PathBuf};
 
 use raiko_core::{
     interfaces::RaikoError,
-    provider::{rpc::RpcBlockDataProvider, BlockDataProvider},
+    provider::{rpc::RpcBlockDataProvider, BlockDataProvider, is_bsc_chain, get_bsc_block_hash},
 };
 use raiko_lib::input::{get_input_path, GuestInput};
 use tracing::{debug, info};
@@ -53,7 +53,16 @@ pub async fn validate_input(
             .first()
             .ok_or_else(|| RaikoError::RPC("No block data for the requested block".to_owned()))?;
 
-        let cached_block_hash = cache_input.block.header.hash_slow();
+        // Get the correct block hash based on chain type
+        let cached_block_hash = if is_bsc_chain(cache_input.chain_spec.chain_id) {
+            debug!("BSC chain detected in cache validation, getting hash from RPC");
+            // For BSC, get hash from RPC instead of calculating
+            block.header.hash.unwrap()
+        } else {
+            // For non-BSC chains, use calculated hash
+            cache_input.block.header.hash_slow()
+        };
+        
         let real_block_hash = block.header.hash.unwrap();
         debug!("cache_block_hash={cached_block_hash:?}, real_block_hash={real_block_hash:?}");
 

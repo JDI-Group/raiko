@@ -1,8 +1,9 @@
 use alloy_primitives::{Address, B256, U256};
 use alloy_rpc_types::Block;
-use raiko_lib::consts::SupportedChainSpecs;
-use reth_primitives::revm_primitives::AccountInfo;
+use raiko_lib::consts::{ChainSpec, SupportedChainSpecs};
+use reth_primitives::{revm_primitives::AccountInfo, Header};
 use std::collections::HashMap;
+use tracing::{debug, info};
 
 use crate::{
     interfaces::{RaikoError, RaikoResult},
@@ -48,4 +49,50 @@ pub async fn get_task_data(
         .hash
         .ok_or_else(|| RaikoError::RPC("No block hash for requested block".to_string()))?;
     Ok((taiko_chain_spec.chain_id, blockhash))
+}
+
+/// Check if the chain is BSC (BNB Smart Chain)
+pub fn is_bsc_chain(chain_id: u64) -> bool {
+    matches!(chain_id, 56 | 97)
+}
+
+/// Get block hash from RPC for BSC networks to ensure consistency with eth.getBlock()
+pub async fn get_bsc_block_hash(
+    chain_spec: &ChainSpec,
+    block_number: u64,
+) -> RaikoResult<B256> {
+    debug!("Getting BSC block hash for block {block_number} from RPC");
+    
+    let provider = RpcBlockDataProvider::new(&chain_spec.rpc, 0)?;
+    let blocks = provider.get_blocks(&[(block_number, false)]).await?;
+    let block = blocks
+        .first()
+        .ok_or_else(|| RaikoError::RPC(format!("No block data for block {block_number}")))?;
+    
+    let block_hash = block
+        .header
+        .hash
+        .ok_or_else(|| RaikoError::RPC(format!("No block hash for block {block_number}")))?;
+    
+    info!("Retrieved BSC block hash for block {block_number}: {block_hash:?}");
+    Ok(block_hash)
+}
+
+/// Get header hash with BSC support
+/// For BSC chains, get hash from RPC to match eth.getBlock() result
+/// For other chains, use the standard hash_slow() calculation
+pub async fn get_header_hash(
+    header: &Header,
+    chain_spec: Option<&ChainSpec>,
+) -> RaikoResult<B256> {
+    // If no chain spec provided or not BSC, use standard calculation
+    if let Some(spec) = chain_spec {
+        if is_bsc_chain(spec.chain_id) {
+            debug!("BSC chain detected (chain_id: {}), getting hash from RPC", spec.chain_id);
+            return get_bsc_block_hash(spec, header.number).await;
+        }
+    }
+    
+    // For non-BSC chains, use standard hash calculation
+    Ok(header.hash_slow())
 }
