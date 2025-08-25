@@ -171,6 +171,8 @@ pub struct TaikoGuestInput {
     pub blob_commitment: Option<Vec<u8>>,
     pub blob_proof: Option<Vec<u8>>,
     pub blob_proof_type: BlobProofType,
+    /// BSC L1 block hash from RPC (for BSC chains only)
+    pub l1_block_hash_rpc: Option<B256>,
 }
 
 pub struct ZlibCompressError(pub String);
