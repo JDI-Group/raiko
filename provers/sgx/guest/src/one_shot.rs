@@ -120,8 +120,7 @@ pub fn bootstrap(global_opts: GlobalOpts) -> Result<()> {
 pub async fn one_shot(global_opts: GlobalOpts, args: OneShotArgs) -> Result<()> {
     // Make sure this SGX instance was bootstrapped
     let prev_privkey = load_bootstrap(&global_opts.secrets_dir)
-        .or_else(|_| bail!("Application was not bootstrapped or has a deprecated bootstrap."))
-        .unwrap();
+        .map_err(|_| anyhow!("Application was not bootstrapped or has a deprecated bootstrap."))?;
 
     println!("Global options: {global_opts:?}, OneShot options: {args:?}");
 
@@ -175,8 +174,7 @@ pub async fn one_shot(global_opts: GlobalOpts, args: OneShotArgs) -> Result<()> 
 pub async fn aggregate(global_opts: GlobalOpts, args: OneShotArgs) -> Result<()> {
     // Make sure this SGX instance was bootstrapped
     let prev_privkey = load_bootstrap(&global_opts.secrets_dir)
-        .or_else(|_| bail!("Application was not bootstrapped or has a deprecated bootstrap."))
-        .unwrap();
+        .map_err(|_| anyhow!("Application was not bootstrapped or has a deprecated bootstrap."))?;
 
     println!("Global options: {global_opts:?}, OneShot options: {args:?}");
 
