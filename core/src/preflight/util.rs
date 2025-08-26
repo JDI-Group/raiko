@@ -220,6 +220,7 @@ pub async fn prepare_taiko_chain_input(
         blob_proof,
         blob_proof_type,
         l1_block_hash_rpc,
+        l1_chain_id: l1_chain_spec.chain_id,
     })
 }
 
