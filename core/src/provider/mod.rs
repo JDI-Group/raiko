@@ -77,22 +77,3 @@ pub async fn get_bsc_block_hash(
     info!("Retrieved BSC block hash for block {block_number}: {block_hash:?}");
     Ok(block_hash)
 }
-
-/// Get header hash with BSC support
-/// For BSC chains, get hash from RPC to match eth.getBlock() result
-/// For other chains, use the standard hash_slow() calculation
-pub async fn get_header_hash(
-    header: &Header,
-    chain_spec: Option<&ChainSpec>,
-) -> RaikoResult<B256> {
-    // If no chain spec provided or not BSC, use standard calculation
-    if let Some(spec) = chain_spec {
-        if is_bsc_chain(spec.chain_id) {
-            debug!("BSC chain detected (chain_id: {}), getting hash from RPC", spec.chain_id);
-            return get_bsc_block_hash(spec, header.number).await;
-        }
-    }
-    
-    // For non-BSC chains, use standard hash calculation
-    Ok(header.hash_slow())
-}

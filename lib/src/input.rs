@@ -173,6 +173,8 @@ pub struct TaikoGuestInput {
     pub blob_proof_type: BlobProofType,
     /// BSC L1 block hash from RPC (for BSC chains only)
     pub l1_block_hash_rpc: Option<B256>,
+    /// L1 chain ID (needed to determine if L1 is BSC)
+    pub l1_chain_id: u64,
 }
 
 pub struct ZlibCompressError(pub String);

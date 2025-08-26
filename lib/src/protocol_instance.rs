@@ -44,7 +44,7 @@ impl From<(&GuestInput, &Header, B256, &BlockProposed)> for BlockMetadata {
             timestamp: header.timestamp,
             extraData: bytes_to_bytes32(&header.extra_data).into(),
 
-            l1Hash: get_l1_hash_for_chain(input.chain_spec.chain_id, &input.taiko.l1_header, input.taiko.l1_block_hash_rpc),
+            l1Hash: get_l1_hash_for_chain(input.taiko.l1_chain_id, &input.taiko.l1_header, input.taiko.l1_block_hash_rpc),
             l1Height: input.taiko.l1_header.number,
 
             blobHash: tx_list_hash,
@@ -82,7 +82,7 @@ impl From<(&GuestInput, &Header, B256, &BlockProposedV2)> for BlockMetadataV2 {
             extraData: bytes_to_bytes32(&header.extra_data).into(),
 
             anchorBlockId: input.taiko.l1_header.number,
-            anchorBlockHash: get_l1_hash_for_chain(input.chain_spec.chain_id, &input.taiko.l1_header, input.taiko.l1_block_hash_rpc),
+            anchorBlockHash: get_l1_hash_for_chain(input.taiko.l1_chain_id, &input.taiko.l1_header, input.taiko.l1_block_hash_rpc),
 
             blobHash: tx_list_hash,
 
@@ -322,17 +322,17 @@ fn get_blob_proof_type(
 
 
 /// Get L1 hash - for BSC use RPC hash from input, others use hash_slow
-fn get_l1_hash_for_chain(chain_id: u64, l1_header: &Header, l1_block_hash_rpc: Option<B256>) -> B256 {
-    if matches!(chain_id, 56 | 97) { // BSC chains
+fn get_l1_hash_for_chain(l1_chain_id: u64, l1_header: &Header, l1_block_hash_rpc: Option<B256>) -> B256 {
+    if matches!(l1_chain_id, 56 | 97) { // BSC chains (56 = BSC mainnet, 97 = BSC testnet)
         if let Some(rpc_hash) = l1_block_hash_rpc {
-            info!("BSC chain detected ({}), using RPC hash: {:?}", chain_id, rpc_hash);
+            info!("BSC L1 chain detected ({}), using RPC hash: {:?}", l1_chain_id, rpc_hash);
             rpc_hash
         } else {
-            info!("BSC chain detected ({}), but no RPC hash provided, using hash_slow() as fallback", chain_id);
+            info!("BSC L1 chain detected ({}), but no RPC hash provided, using hash_slow() as fallback", l1_chain_id);
             l1_header.hash_slow()
         }
     } else {
-        // For non-BSC chains, use standard calculation
+        // For non-BSC L1 chains, use standard calculation
         l1_header.hash_slow()
     }
 }
