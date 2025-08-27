@@ -19,7 +19,7 @@ use crate::{
     CycleTracker,
 };
 use reth_evm_ethereum::taiko::ANCHOR_GAS_LIMIT;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 #[derive(Debug, Clone)]
 pub enum BlockMetaDataFork {
@@ -32,9 +32,6 @@ impl From<(&GuestInput, &Header, B256, &BlockProposed)> for BlockMetadata {
     fn from(
         (input, header, tx_list_hash, block_proposed): (&GuestInput, &Header, B256, &BlockProposed),
     ) -> Self {
-        // Get L1 block hash, use RPC hash for BSC chains
-        let l1_hash = get_l1_block_hash_sync(input.chain_spec.chain_id, &input.taiko.l1_header);
-        
         Self {
             coinbase: header.beneficiary,
             id: header.number,
@@ -47,7 +44,7 @@ impl From<(&GuestInput, &Header, B256, &BlockProposed)> for BlockMetadata {
             timestamp: header.timestamp,
             extraData: bytes_to_bytes32(&header.extra_data).into(),
 
-            l1Hash: l1_hash,
+            l1Hash: get_l1_hash_for_chain(input.taiko.l1_chain_id, &input.taiko.l1_header, input.taiko.l1_block_hash_rpc),
             l1Height: input.taiko.l1_header.number,
 
             blobHash: tx_list_hash,
@@ -72,9 +69,6 @@ impl From<(&GuestInput, &Header, B256, &BlockProposedV2)> for BlockMetadataV2 {
             &BlockProposedV2,
         ),
     ) -> Self {
-        // Get L1 block hash, use RPC hash for BSC chains
-        let anchor_block_hash = get_l1_block_hash_sync(input.chain_spec.chain_id, &input.taiko.l1_header);
-        
         Self {
             id: header.number,
             coinbase: header.beneficiary,
@@ -88,7 +82,7 @@ impl From<(&GuestInput, &Header, B256, &BlockProposedV2)> for BlockMetadataV2 {
             extraData: bytes_to_bytes32(&header.extra_data).into(),
 
             anchorBlockId: input.taiko.l1_header.number,
-            anchorBlockHash: anchor_block_hash,
+            anchorBlockHash: get_l1_hash_for_chain(input.taiko.l1_chain_id, &input.taiko.l1_header, input.taiko.l1_block_hash_rpc),
 
             blobHash: tx_list_hash,
 
@@ -326,24 +320,19 @@ fn get_blob_proof_type(
     }
 }
 
-/// Check if chain is BSC (BNB Smart Chain)
-fn is_bsc_chain(chain_id: u64) -> bool {
-    matches!(chain_id, 56 | 97) // 56 = BSC mainnet, 97 = BSC testnet
-}
 
-/// Get L1 block hash - for BSC we need to handle this differently
-/// The key insight is that for BSC chains, we should already have the correct hash from RPC data
-/// If we can't get it directly, we fall back to hash_slow() for now but log a warning
-fn get_l1_block_hash_sync(chain_id: u64, l1_header: &Header) -> B256 {
-    if is_bsc_chain(chain_id) {
-        // For BSC chains, we really need the RPC hash to be provided correctly
-        // in the input data. If we reach this point with incorrect data,
-        // the real fix should be upstream where the L1 header is populated
-        warn!("BSC chain detected ({}), but L1 header hash needs to come from RPC data!", chain_id);
-        warn!("Using hash_slow() as fallback, but this will likely cause hash mismatch");
-        l1_header.hash_slow()
+/// Get L1 hash - for BSC use RPC hash from input, others use hash_slow
+fn get_l1_hash_for_chain(l1_chain_id: u64, l1_header: &Header, l1_block_hash_rpc: Option<B256>) -> B256 {
+    if matches!(l1_chain_id, 56 | 97) { // BSC chains (56 = BSC mainnet, 97 = BSC testnet)
+        if let Some(rpc_hash) = l1_block_hash_rpc {
+            info!("BSC L1 chain detected ({}), using RPC hash: {:?}", l1_chain_id, rpc_hash);
+            rpc_hash
+        } else {
+            info!("BSC L1 chain detected ({}), but no RPC hash provided, using hash_slow() as fallback", l1_chain_id);
+            l1_header.hash_slow()
+        }
     } else {
-        // For non-BSC chains, use standard calculation
+        // For non-BSC L1 chains, use standard calculation
         l1_header.hash_slow()
     }
 }

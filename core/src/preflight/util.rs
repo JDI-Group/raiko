@@ -28,7 +28,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::{
     interfaces::{RaikoError, RaikoResult},
-    provider::{db::ProviderDb, rpc::RpcBlockDataProvider, BlockDataProvider, is_bsc_chain},
+    provider::{db::ProviderDb, rpc::RpcBlockDataProvider, BlockDataProvider, is_bsc_chain, get_bsc_block_hash},
     require,
 };
 
@@ -130,12 +130,10 @@ pub async fn prepare_taiko_chain_input(
     .await?;
     assert_eq!(anchor_state_root, l1_state_header.state_root);
     
-    // For BSC chains, use the hash from RPC directly instead of calculating
+    // Use the project's get_bsc_block_hash function for BSC chains
     let l1_state_block_hash = if is_bsc_chain(l1_chain_spec.chain_id) {
-        info!("BSC L1 chain detected, using RPC block hash for L1 state header");
-        l1_state_header.hash.ok_or_else(|| {
-            RaikoError::Preflight("No L1 state block hash from RPC for BSC chain".to_owned())
-        })?
+        info!("BSC L1 chain detected, using get_bsc_block_hash for L1 state header");
+        get_bsc_block_hash(l1_chain_spec, anchor_block_height).await?
     } else {
         l1_state_header.hash.ok_or_else(|| {
             RaikoError::Preflight("No L1 state block hash for the requested block".to_owned())
@@ -143,10 +141,8 @@ pub async fn prepare_taiko_chain_input(
     };
     
     let l1_inclusion_block_hash = if is_bsc_chain(l1_chain_spec.chain_id) {
-        info!("BSC L1 chain detected, using RPC block hash for L1 inclusion header");
-        l1_inclusion_header.hash.ok_or_else(|| {
-            RaikoError::Preflight("No L1 inclusion block hash from RPC for BSC chain".to_owned())
-        })?
+        info!("BSC L1 chain detected, using get_bsc_block_hash for L1 inclusion header");
+        get_bsc_block_hash(l1_chain_spec, l1_inclusion_block_number).await?
     } else {
         l1_inclusion_header.hash.ok_or_else(|| {
             RaikoError::Preflight("No L1 inclusion block hash for the requested block".to_owned())
@@ -203,8 +199,19 @@ pub async fn prepare_taiko_chain_input(
     };
 
     // Create the input struct without the block data set
+    let l1_header: reth_primitives::Header = l1_state_header.try_into().unwrap();
+
+    // For BSC chains, get the RPC block hash
+    let l1_block_hash_rpc = if is_bsc_chain(l1_chain_spec.chain_id) {
+        let rpc_hash = get_bsc_block_hash(l1_chain_spec, anchor_block_height).await?;
+        info!("BSC L1 chain detected, storing RPC hash: {:?}", rpc_hash);
+        Some(rpc_hash)
+    } else {
+        None
+    };
+
     Ok(TaikoGuestInput {
-        l1_header: l1_state_header.try_into().unwrap(),
+        l1_header,
         tx_data,
         anchor_tx: Some(anchor_tx.clone()),
         blob_commitment,
@@ -212,6 +219,8 @@ pub async fn prepare_taiko_chain_input(
         prover_data,
         blob_proof,
         blob_proof_type,
+        l1_block_hash_rpc,
+        l1_chain_id: l1_chain_spec.chain_id,
     })
 }
 
