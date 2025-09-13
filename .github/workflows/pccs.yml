@@ -28,5 +28,5 @@ jobs:
         run: |
           cd docker
           docker compose build pccs --no-cache
-          ./push_image.sh ${{ github.ref_name }}
+          ./push_image.sh pccs ${{ github.ref_name }}
         shell: bash

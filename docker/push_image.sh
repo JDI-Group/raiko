@@ -1,9 +1,21 @@
 #! /bin/bash
 
-SOURCE_IMAGE_FULLNAME=us-docker.pkg.dev/moonchain-com/images/raiko:latest
+# Determine image type from first parameter
+if [ "_$1" == "_pccs" ]; then
+    SOURCE_IMAGE_FULLNAME=us-docker.pkg.dev/moonchain-com/images/pccs:latest
+    IMAGE_NAME=us-docker.pkg.dev/moonchain-com/images/pccs
+    shift # Remove first parameter
+elif [ "_$1" == "_raiko" ]; then
+    SOURCE_IMAGE_FULLNAME=us-docker.pkg.dev/moonchain-com/images/raiko:latest
+    IMAGE_NAME=us-docker.pkg.dev/moonchain-com/images/raiko
+    shift # Remove first parameter
+else
+    # Default to raiko for backward compatibility
+    SOURCE_IMAGE_FULLNAME=us-docker.pkg.dev/moonchain-com/images/raiko:latest
+    IMAGE_NAME=us-docker.pkg.dev/moonchain-com/images/raiko
+fi
 
-# Set image name
-IMAGE_NAME=us-docker.pkg.dev/moonchain-com/images/raiko
+# Set image tag from remaining parameters
 if [ "_$1" == "_" ]; then
     IMAGE_TAG="latest"
 elif [ "_$1" == "_moonchain" ]; then
